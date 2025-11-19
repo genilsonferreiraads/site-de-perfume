@@ -171,6 +171,106 @@ const PaymentInputModal: React.FC<{
     );
 };
 
+// --- AUTH COMPONENTS ---
+
+const LoginPage: React.FC<{ onLogin: (success: boolean) => void }> = ({ onLogin }) => {
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState('');
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        setIsLoading(true);
+        setError('');
+
+        // Simulação de delay de rede
+        setTimeout(() => {
+            if (email === 'admin' && password === '1234') {
+                onLogin(true);
+            } else {
+                setError('Credenciais inválidas. Tente admin / 1234');
+                setIsLoading(false);
+            }
+        }, 1000);
+    };
+
+    return (
+        <div className="min-h-screen flex flex-col items-center justify-center bg-background-light dark:bg-background-dark p-4 relative overflow-hidden">
+            {/* Background decoration */}
+            <div className="absolute top-[-20%] left-[-20%] w-[140%] h-[60%] bg-primary rounded-b-[50%] shadow-2xl"></div>
+            
+            <div className="relative z-10 w-full max-w-sm bg-surface-light dark:bg-surface-dark p-8 rounded-3xl shadow-2xl animate-slide-up">
+                <div className="flex flex-col items-center mb-8">
+                    <div className="h-16 w-16 rounded-2xl bg-primary flex items-center justify-center shadow-lg shadow-primary/30 mb-4">
+                        <span className="material-symbols-outlined text-white text-4xl">fragrance</span>
+                    </div>
+                    <h1 className="text-2xl font-black text-text-primary-light dark:text-text-primary-dark">PerfumeFlow</h1>
+                    <p className="text-text-secondary-light dark:text-text-secondary-dark">Gestão de Revenda</p>
+                </div>
+
+                <form onSubmit={handleSubmit} className="space-y-4">
+                    <div>
+                        <label className="block text-sm font-bold mb-1 text-text-secondary-light">Usuário</label>
+                        <div className="relative">
+                            <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">person</span>
+                            <input 
+                                type="text" 
+                                value={email}
+                                onChange={e => setEmail(e.target.value)}
+                                className="form-input w-full pl-10 h-12 rounded-xl bg-background-light dark:bg-background-dark border-none transition-all focus:ring-2 focus:ring-primary"
+                                placeholder="Digite seu usuário"
+                            />
+                        </div>
+                    </div>
+                    <div>
+                        <label className="block text-sm font-bold mb-1 text-text-secondary-light">Senha</label>
+                        <div className="relative">
+                            <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">lock</span>
+                            <input 
+                                type="password" 
+                                value={password}
+                                onChange={e => setPassword(e.target.value)}
+                                className="form-input w-full pl-10 h-12 rounded-xl bg-background-light dark:bg-background-dark border-none transition-all focus:ring-2 focus:ring-primary"
+                                placeholder="••••••••"
+                            />
+                        </div>
+                    </div>
+
+                    {error && (
+                        <div className="p-3 rounded-xl bg-red-50 dark:bg-red-900/20 text-red-500 text-sm font-bold flex items-center gap-2 animate-fade-in">
+                            <span className="material-symbols-outlined text-lg">error</span>
+                            {error}
+                        </div>
+                    )}
+
+                    <button 
+                        type="submit" 
+                        disabled={isLoading || !email || !password}
+                        className="w-full h-12 bg-primary disabled:opacity-70 text-white font-bold rounded-xl shadow-lg shadow-primary/30 flex items-center justify-center gap-2 mt-2 transition-all active:scale-95"
+                    >
+                        {isLoading ? (
+                            <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                        ) : (
+                            <>
+                                <span>Entrar</span>
+                                <span className="material-symbols-outlined">arrow_forward</span>
+                            </>
+                        )}
+                    </button>
+                </form>
+
+                <div className="mt-6 text-center">
+                    <p className="text-xs text-gray-400">Credenciais Demo:</p>
+                    <p className="text-xs font-mono text-primary font-bold">admin / 1234</p>
+                </div>
+            </div>
+            
+            <p className="absolute bottom-6 text-xs text-gray-400 opacity-60">© 2024 PerfumeFlow App</p>
+        </div>
+    );
+};
+
 // --- NAVIGATION COMPONENTS ---
 
 const BottomNav: React.FC<{ activePage: Page; setActivePage: (page: Page) => void; openMenu: () => void }> = ({ activePage, setActivePage, openMenu }) => {
@@ -200,7 +300,7 @@ const BottomNav: React.FC<{ activePage: Page; setActivePage: (page: Page) => voi
     );
 };
 
-const Sidebar: React.FC<{ activePage: Page; setActivePage: (page: Page) => void }> = ({ activePage, setActivePage }) => {
+const Sidebar: React.FC<{ activePage: Page; setActivePage: (page: Page) => void; onLogout: () => void }> = ({ activePage, setActivePage, onLogout }) => {
     const navItems = [
         { id: Page.Dashboard, icon: 'dashboard', label: 'Dashboard' },
         { id: Page.NovaVenda, icon: 'shopping_cart', label: 'Nova Venda' },
@@ -232,6 +332,12 @@ const Sidebar: React.FC<{ activePage: Page; setActivePage: (page: Page) => void 
                     </button>
                 ))}
             </nav>
+            <div className="pt-4 border-t border-border-light dark:border-border-dark mt-2">
+                <button onClick={onLogout} className="flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 text-left group hover:bg-red-50 dark:hover:bg-red-900/10 text-red-500 w-full">
+                    <span className="material-symbols-outlined">logout</span>
+                    <p className="text-sm font-bold">Sair</p>
+                </button>
+            </div>
         </aside>
     );
 };
@@ -1015,11 +1121,13 @@ const FullSettingsPage: React.FC<{
     resetData: () => void,
     showToast: (msg: string, type: 'success' | 'error') => void,
     isDarkMode: boolean,
-    toggleTheme: () => void
-}> = ({ user, updateUser, resetData, showToast, isDarkMode, toggleTheme }) => {
+    toggleTheme: () => void,
+    onLogout: () => void
+}> = ({ user, updateUser, resetData, showToast, isDarkMode, toggleTheme, onLogout }) => {
     const [formData, setFormData] = useState(user);
     const [isEditing, setIsEditing] = useState(false);
     const [resetConfirmation, setResetConfirmation] = useState(false);
+    const [logoutConfirmation, setLogoutConfirmation] = useState(false);
 
     const handleSave = () => {
         updateUser(formData);
@@ -1081,7 +1189,7 @@ const FullSettingsPage: React.FC<{
 
                 {/* App Settings */}
                 <h3 className="font-bold text-lg mb-3 px-2">Aplicativo</h3>
-                <div className="bg-card-light dark:bg-card-dark rounded-2xl border border-border-light dark:border-border-dark shadow-sm overflow-hidden mb-8">
+                <div className="bg-card-light dark:bg-card-dark rounded-2xl border border-border-light dark:border-border-dark shadow-sm overflow-hidden mb-6">
                     <div className="p-4 flex items-center justify-between border-b border-border-light dark:border-border-dark">
                         <div className="flex items-center gap-3">
                             <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-600 flex items-center justify-center">
@@ -1096,7 +1204,7 @@ const FullSettingsPage: React.FC<{
                             <div className={`w-5 h-5 bg-white rounded-full absolute top-1 transition-all shadow-sm ${isDarkMode ? 'left-6' : 'left-1'}`}></div>
                         </button>
                     </div>
-                    <button onClick={() => setResetConfirmation(true)} className="w-full p-4 flex items-center justify-between text-left hover:bg-red-50 dark:hover:bg-red-900/10 transition-colors group">
+                    <button onClick={() => setResetConfirmation(true)} className="w-full p-4 flex items-center justify-between text-left hover:bg-red-50 dark:hover:bg-red-900/10 transition-colors group border-b border-border-light dark:border-border-dark">
                         <div className="flex items-center gap-3">
                             <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-900/30 text-red-600 flex items-center justify-center group-hover:bg-red-200 transition-colors">
                                 <span className="material-symbols-outlined">delete_forever</span>
@@ -1108,9 +1216,21 @@ const FullSettingsPage: React.FC<{
                         </div>
                         <span className="material-symbols-outlined text-gray-400">chevron_right</span>
                     </button>
+                     <button onClick={() => setLogoutConfirmation(true)} className="w-full p-4 flex items-center justify-between text-left hover:bg-gray-100 dark:hover:bg-white/5 transition-colors group">
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 flex items-center justify-center group-hover:bg-gray-300 transition-colors">
+                                <span className="material-symbols-outlined">logout</span>
+                            </div>
+                            <div>
+                                <p className="font-bold text-gray-600 dark:text-gray-300">Sair da Conta</p>
+                                <p className="text-xs text-text-secondary-light">Fazer logout do app</p>
+                            </div>
+                        </div>
+                        <span className="material-symbols-outlined text-gray-400">chevron_right</span>
+                    </button>
                 </div>
                 
-                <p className="text-center text-xs text-gray-400 mb-10">PerfumeFlow v1.2.0 • Build 2024</p>
+                <p className="text-center text-xs text-gray-400 mb-10">PerfumeFlow v1.3.0 • Build 2024</p>
             </div>
 
             <ConfirmationModal 
@@ -1120,6 +1240,16 @@ const FullSettingsPage: React.FC<{
                 title="Resetar Aplicativo"
                 message="Tem certeza absoluta? Isso apagará TODAS as vendas, clientes, produtos e despesas e restaurará os dados iniciais. Essa ação é irreversível."
                 confirmText="Sim, apagar tudo"
+                isDestructive
+            />
+
+             <ConfirmationModal 
+                isOpen={logoutConfirmation}
+                onClose={() => setLogoutConfirmation(false)}
+                onConfirm={onLogout}
+                title="Sair da Conta"
+                message="Deseja realmente sair do aplicativo?"
+                confirmText="Sair"
                 isDestructive
             />
         </div>
@@ -1133,6 +1263,11 @@ const App: React.FC = () => {
     const [currentPage, setCurrentPage] = useState<Page>(Page.Dashboard);
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     
+    // Auth State
+    const [isAuthenticated, setIsAuthenticated] = useState(() => {
+        return localStorage.getItem('perfume_auth_token') === 'valid';
+    });
+
     // Data State
     const [clients, setClients] = useStickyState('perfume_clients', initialClients);
     const [products, setProducts] = useStickyState('perfume_products', initialProducts);
@@ -1158,6 +1293,20 @@ const App: React.FC = () => {
     }, [darkMode]);
 
     // Actions
+    const handleLogin = (success: boolean) => {
+        if (success) {
+            localStorage.setItem('perfume_auth_token', 'valid');
+            setIsAuthenticated(true);
+            showToast('Login realizado com sucesso!');
+        }
+    };
+
+    const handleLogout = () => {
+        localStorage.removeItem('perfume_auth_token');
+        setIsAuthenticated(false);
+        setCurrentPage(Page.Dashboard);
+    };
+
     const addSale = (sale: any) => setSales((p: any) => [...p, { id: `s${Date.now()}`, ...sale }]);
     const addClient = (client: any) => setClients((p: any) => [...p, { id: `c${Date.now()}`, avatarUrl: `https://ui-avatars.com/api/?name=${client.name}`, ...client }]);
     const deleteClient = (id: string) => setClients((p: any) => p.filter((c: any) => c.id !== id));
@@ -1192,10 +1341,14 @@ const App: React.FC = () => {
             case Page.Fiados: return <FullFiadosPage clients={clients} sales={sales} onAddPayment={addPayment} />;
             case Page.Historico: return <FullHistoryPage sales={sales} clients={clients} />;
             case Page.Despesas: return <FullExpensesPage expenses={expenses} addExpense={addExpense} deleteExpense={deleteExpense} showToast={showToast} />;
-            case Page.Configuracoes: return <FullSettingsPage user={user} updateUser={updateUser} resetData={resetData} showToast={showToast} isDarkMode={darkMode} toggleTheme={() => setDarkMode(!darkMode)} />;
+            case Page.Configuracoes: return <FullSettingsPage user={user} updateUser={updateUser} resetData={resetData} showToast={showToast} isDarkMode={darkMode} toggleTheme={() => setDarkMode(!darkMode)} onLogout={handleLogout} />;
             default: return <div className="p-8 text-center text-gray-500 mt-10">Página em construção: {currentPage}</div>;
         }
     };
+
+    if (!isAuthenticated) {
+        return <LoginPage onLogin={handleLogin} />;
+    }
 
     return (
         <div className="flex min-h-screen w-full text-text-primary-light dark:text-text-primary-dark bg-background-light dark:bg-background-dark font-display overflow-hidden">
@@ -1209,7 +1362,7 @@ const App: React.FC = () => {
                 ))}
             </div>
 
-            <Sidebar activePage={currentPage} setActivePage={setCurrentPage} />
+            <Sidebar activePage={currentPage} setActivePage={setCurrentPage} onLogout={handleLogout} />
             
             <main className="flex-1 w-full relative overflow-hidden flex flex-col h-screen">
                 {renderPage()}
