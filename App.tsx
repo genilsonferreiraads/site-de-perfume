@@ -862,36 +862,77 @@ const FullHistoryPage: React.FC<{ sales: Sale[], clients: Client[] }> = ({ sales
 
 const FullFiadosPage: React.FC<{
     clients: Client[], sales: Sale[], 
-    onAddPayment: (saleId: string, amount: number) => void
-}> = ({ clients, sales, onAddPayment }) => {
+    onAddPayment: (saleId: string, amount: number) => void,
+    onAddManualDebt: (clientId: string, amount: number, description: string) => void,
+    products: Product[]
+}> = ({ clients, sales, onAddPayment, onAddManualDebt, products }) => {
     const [activeClientId, setActiveClientId] = useState<string | null>(null);
     const [paymentModalState, setPaymentModalState] = useState<{isOpen: boolean, saleId: string | null, maxAmount: number}>({isOpen: false, saleId: null, maxAmount: 0});
+    const [manualDebtModal, setManualDebtModal] = useState<{isOpen: boolean, clientId: string | null}>({isOpen: false, clientId: null});
+    const [manualDebtForm, setManualDebtForm] = useState({ amount: '', description: '' });
+    const [activeTab, setActiveTab] = useState<'pending' | 'history'>('pending');
+    const [searchTerm, setSearchTerm] = useState('');
 
-    // Logic to group debts by client
+    // Group debts logic
     const debtClients = useMemo(() => {
         const map = new Map();
         sales.filter(s => s.paymentMethod === PaymentMethod.Credit).forEach(s => {
             const paid = s.payments.reduce((acc, p) => acc + p.amount, 0);
             const debt = s.total - paid;
-            if (debt > 0.01) {
-                if (!map.has(s.clientId)) map.set(s.clientId, { totalDebt: 0, count: 0 });
-                const c = map.get(s.clientId);
+            
+            if (!map.has(s.clientId)) map.set(s.clientId, { totalDebt: 0, count: 0, lastDate: s.date });
+            const c = map.get(s.clientId);
+            if(debt > 0.01) {
                 c.totalDebt += debt;
                 c.count += 1;
             }
+            if (new Date(s.date) > new Date(c.lastDate)) c.lastDate = s.date;
         });
         return Array.from(map.entries()).map(([id, data]) => ({
             client: clients.find(c => c.id === id),
             ...data
-        })).filter(i => i.client);
+        })).filter(i => i.client && (i.totalDebt > 0.01 || i.count > 0)).sort((a,b) => b.totalDebt - a.totalDebt);
     }, [sales, clients]);
 
-    const clientSales = activeClientId ? sales.filter(s => s.clientId === activeClientId && s.paymentMethod === PaymentMethod.Credit && (s.total - s.payments.reduce((a,b)=>a+b.amount,0)) > 0.01) : [];
+    const filteredClients = debtClients.filter(d => d.client!.name.toLowerCase().includes(searchTerm.toLowerCase()));
+
+    const activeClientData = useMemo(() => {
+        if (!activeClientId) return null;
+        return debtClients.find(d => d.client?.id === activeClientId);
+    }, [activeClientId, debtClients]);
+
+    const clientSales = useMemo(() => {
+        if (!activeClientId) return [];
+        return sales.filter(s => s.clientId === activeClientId && s.paymentMethod === PaymentMethod.Credit).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    }, [activeClientId, sales]);
+
+    const pendingSales = clientSales.filter(s => (s.total - s.payments.reduce((a,b)=>a+b.amount,0)) > 0.01);
 
     const handlePaymentConfirm = (amount: number) => {
         if (paymentModalState.saleId) {
             onAddPayment(paymentModalState.saleId, amount);
         }
+    };
+
+    const handleManualDebtSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (manualDebtModal.clientId && manualDebtForm.amount && manualDebtForm.description) {
+            onAddManualDebt(manualDebtModal.clientId, parseFloat(manualDebtForm.amount), manualDebtForm.description);
+            setManualDebtModal({ isOpen: false, clientId: null });
+            setManualDebtForm({ amount: '', description: '' });
+        }
+    };
+
+    const sendWhatsAppReminder = (client: Client, totalDebt: number) => {
+        const msg = `Olá ${client.name}, notamos uma pendência de R$ ${totalDebt.toFixed(2)} na PerfumeFlow. Podemos combinar o pagamento?`;
+        const link = `https://wa.me/55${client.phone.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`;
+        window.open(link, '_blank');
+    };
+
+    // Get product name helper
+    const getProductName = (id: string) => {
+        const p = products.find(pr => pr.id === id);
+        return p ? p.name : (id === 'manual_debt' ? 'Débito Avulso' : 'Produto Desconhecido');
     };
 
     return (
@@ -900,27 +941,56 @@ const FullFiadosPage: React.FC<{
                 <>
                     <Header title="Fiados" />
                     <div className="p-4 md:p-8 flex-1 overflow-y-auto custom-scrollbar">
-                        <DesktopHeader title="Controle de Fiados" />
-                        {debtClients.length === 0 ? (
+                        <DesktopHeader title="Gestão de Cobranças" />
+                        
+                        {/* Search */}
+                        <div className="relative mb-4">
+                            <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">search</span>
+                            <input 
+                                value={searchTerm}
+                                onChange={e => setSearchTerm(e.target.value)}
+                                className="form-input w-full pl-10 h-12 rounded-xl bg-surface-light dark:bg-surface-dark border-none shadow-sm"
+                                placeholder="Buscar cliente devedor..."
+                            />
+                        </div>
+
+                        {filteredClients.length === 0 ? (
                             <div className="flex flex-col items-center justify-center py-20 text-gray-400">
-                                <span className="material-symbols-outlined text-6xl mb-2">check_circle</span>
-                                <p>Nenhum fiado pendente!</p>
+                                <span className="material-symbols-outlined text-6xl mb-2 opacity-30">check_circle</span>
+                                <p>Tudo em dia!</p>
                             </div>
                         ) : (
                             <div className="space-y-3">
-                                {debtClients.map(item => (
+                                {filteredClients.map(item => (
                                     <div key={item.client!.id} onClick={() => setActiveClientId(item.client!.id)}
-                                         className="bg-card-light dark:bg-card-dark p-4 rounded-2xl border border-border-light dark:border-border-dark shadow-sm flex items-center justify-between active:scale-98 transition-transform">
-                                        <div className="flex items-center gap-3">
-                                            <img src={item.client!.avatarUrl} className="w-12 h-12 rounded-full bg-gray-200" />
-                                            <div>
-                                                <h3 className="font-bold text-text-primary-light dark:text-text-primary-dark">{item.client!.name}</h3>
-                                                <p className="text-xs text-text-secondary-light">{item.count} compras pendentes</p>
+                                         className="bg-card-light dark:bg-card-dark p-4 rounded-2xl border border-border-light dark:border-border-dark shadow-sm active:scale-98 transition-transform relative overflow-hidden group cursor-pointer">
+                                        
+                                        <div className="flex items-center justify-between relative z-10">
+                                            <div className="flex items-center gap-3">
+                                                <div className="relative">
+                                                    <img src={item.client!.avatarUrl} className="w-12 h-12 rounded-full bg-gray-200 object-cover" />
+                                                    {item.totalDebt > 0 && <div className="absolute bottom-0 right-0 w-3 h-3 bg-red-500 rounded-full border-2 border-white dark:border-gray-800"></div>}
+                                                </div>
+                                                <div>
+                                                    <h3 className="font-bold text-text-primary-light dark:text-text-primary-dark">{item.client!.name}</h3>
+                                                    <p className="text-xs text-text-secondary-light">Última compra: {new Date(item.lastDate).toLocaleDateString('pt-BR')}</p>
+                                                </div>
+                                            </div>
+                                            <div className="text-right">
+                                                <p className="font-black text-status-red text-lg">R$ {item.totalDebt.toFixed(2)}</p>
+                                                <p className="text-xs text-text-secondary-light font-medium">{item.count} pendências</p>
                                             </div>
                                         </div>
-                                        <div className="text-right">
-                                            <p className="font-black text-status-red text-lg">R$ {item.totalDebt.toFixed(2)}</p>
-                                            <span className="text-xs text-primary font-bold">Ver Fatura</span>
+
+                                        {/* Quick Actions on Hover/Desktop */}
+                                        <div className="mt-3 pt-3 border-t border-border-light dark:border-border-dark flex gap-2">
+                                            <button onClick={(e) => { e.stopPropagation(); sendWhatsAppReminder(item.client!, item.totalDebt); }} 
+                                                className="flex-1 flex items-center justify-center gap-2 h-9 bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 rounded-lg text-sm font-bold hover:bg-green-200 transition-colors">
+                                                <span className="material-symbols-outlined text-lg">chat</span> Cobrar
+                                            </button>
+                                             <button className="flex-1 flex items-center justify-center gap-2 h-9 bg-gray-100 text-gray-700 dark:bg-white/10 dark:text-gray-300 rounded-lg text-sm font-bold hover:bg-gray-200 transition-colors">
+                                                <span className="material-symbols-outlined text-lg">visibility</span> Detalhes
+                                            </button>
                                         </div>
                                     </div>
                                 ))}
@@ -929,36 +999,96 @@ const FullFiadosPage: React.FC<{
                     </div>
                 </>
             ) : (
-                <div className="flex flex-col h-full">
-                    <div className="bg-surface-light dark:bg-surface-dark p-4 border-b border-border-light dark:border-border-dark sticky top-0 z-20 flex items-center gap-3">
-                        <button onClick={() => setActiveClientId(null)} className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 dark:bg-white/10">
-                            <span className="material-symbols-outlined text-sm">arrow_back</span>
-                        </button>
-                        <h2 className="font-bold text-lg">Fatura de {clients.find(c => c.id === activeClientId)?.name.split(' ')[0]}</h2>
-                    </div>
-                    <div className="p-4 overflow-y-auto flex-1 pb-24 custom-scrollbar">
-                        {clientSales.map(sale => {
-                            const paid = sale.payments.reduce((a,b) => a+b.amount, 0);
-                            const debt = sale.total - paid;
-                            return (
-                                <div key={sale.id} className="bg-card-light dark:bg-card-dark p-5 rounded-2xl border border-border-light dark:border-border-dark shadow-sm mb-3">
-                                    <div className="flex justify-between mb-2">
-                                        <span className="text-xs text-gray-500">{new Date(sale.date).toLocaleDateString('pt-BR')}</span>
-                                        <span className="font-bold">Total: R$ {sale.total.toFixed(2)}</span>
-                                    </div>
-                                    <div className="flex justify-between items-end">
-                                        <div>
-                                            <p className="text-sm text-green-600">Pago: R$ {paid.toFixed(2)}</p>
-                                            <p className="font-bold text-red-500 text-lg mt-1">Falta: R$ {debt.toFixed(2)}</p>
-                                        </div>
-                                        <button onClick={() => setPaymentModalState({isOpen: true, saleId: sale.id, maxAmount: debt})} 
-                                            className="px-4 py-2 bg-primary text-white rounded-lg font-bold text-sm shadow-lg shadow-primary/20">
-                                            Pagar
-                                        </button>
-                                    </div>
+                <div className="flex flex-col h-full bg-background-light dark:bg-background-dark">
+                    {/* Detail Header */}
+                    <div className="bg-surface-light dark:bg-surface-dark p-4 border-b border-border-light dark:border-border-dark shadow-sm sticky top-0 z-20">
+                        <div className="flex items-center gap-3 mb-4">
+                            <button onClick={() => setActiveClientId(null)} className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 dark:bg-white/10">
+                                <span className="material-symbols-outlined text-sm">arrow_back</span>
+                            </button>
+                            <h2 className="font-bold text-lg">Detalhes da Conta</h2>
+                        </div>
+                        
+                        <div className="bg-gradient-to-br from-gray-900 to-gray-800 dark:from-black dark:to-gray-900 rounded-2xl p-5 text-white shadow-lg mb-4 relative overflow-hidden">
+                            <div className="absolute right-0 top-0 p-4 opacity-10">
+                                <span className="material-symbols-outlined text-8xl">receipt_long</span>
+                            </div>
+                            <div className="relative z-10">
+                                <p className="text-gray-400 text-sm mb-1">Saldo Devedor Total</p>
+                                <h1 className="text-3xl font-black mb-4">R$ {activeClientData?.totalDebt.toFixed(2) || '0.00'}</h1>
+                                <div className="flex gap-3">
+                                     <button onClick={() => sendWhatsAppReminder(activeClientData!.client!, activeClientData!.totalDebt)} 
+                                        className="flex-1 bg-green-500 hover:bg-green-600 text-white h-10 rounded-xl font-bold flex items-center justify-center gap-2 transition-colors shadow-lg shadow-green-500/20">
+                                        <span className="material-symbols-outlined text-lg">chat</span> Cobrar no Zap
+                                     </button>
+                                     <button onClick={() => setManualDebtModal({isOpen: true, clientId: activeClientId})} 
+                                        className="flex-1 bg-white/10 hover:bg-white/20 text-white h-10 rounded-xl font-bold flex items-center justify-center gap-2 transition-colors backdrop-blur-md">
+                                        <span className="material-symbols-outlined text-lg">add_card</span> Novo Débito
+                                     </button>
                                 </div>
-                            )
-                        })}
+                            </div>
+                        </div>
+
+                        <div className="flex p-1 bg-gray-100 dark:bg-black/20 rounded-xl">
+                            <button onClick={() => setActiveTab('pending')} className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'pending' ? 'bg-white dark:bg-surface-dark shadow-sm text-primary' : 'text-gray-500'}`}>Pendências</button>
+                            <button onClick={() => setActiveTab('history')} className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'history' ? 'bg-white dark:bg-surface-dark shadow-sm text-primary' : 'text-gray-500'}`}>Extrato Completo</button>
+                        </div>
+                    </div>
+
+                    {/* Sales List */}
+                    <div className="p-4 overflow-y-auto flex-1 pb-24 custom-scrollbar">
+                        {(activeTab === 'pending' ? pendingSales : clientSales).length === 0 ? (
+                            <div className="text-center py-10 opacity-50">
+                                <p>Nenhum registro encontrado.</p>
+                            </div>
+                        ) : (
+                            (activeTab === 'pending' ? pendingSales : clientSales).map(sale => {
+                                const paid = sale.payments.reduce((a,b) => a+b.amount, 0);
+                                const debt = sale.total - paid;
+                                const isPaid = debt < 0.01;
+
+                                return (
+                                    <div key={sale.id} className={`p-4 rounded-2xl border shadow-sm mb-3 relative overflow-hidden ${isPaid ? 'bg-gray-50 dark:bg-white/5 border-transparent opacity-70' : 'bg-card-light dark:bg-card-dark border-border-light dark:border-border-dark'}`}>
+                                        <div className="flex justify-between items-start mb-3">
+                                            <div>
+                                                <p className="text-xs text-gray-500 font-bold uppercase mb-1">{new Date(sale.date).toLocaleDateString('pt-BR')}</p>
+                                                <div className="flex flex-col">
+                                                    {sale.items.map((item, idx) => (
+                                                        <span key={idx} className="font-medium text-sm text-text-primary-light dark:text-text-primary-dark">
+                                                            {item.quantity}x {getProductName(item.productId)}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                            <div className="text-right">
+                                                <p className="font-bold text-gray-800 dark:text-gray-200">R$ {sale.total.toFixed(2)}</p>
+                                                {isPaid && <span className="text-xs font-bold text-green-500 bg-green-100 dark:bg-green-900/30 px-2 py-0.5 rounded text-[10px]">PAGO</span>}
+                                            </div>
+                                        </div>
+                                        
+                                        {!isPaid && (
+                                            <div className="pt-3 border-t border-gray-100 dark:border-white/10 flex items-center justify-between">
+                                                <div>
+                                                    <p className="text-xs text-gray-500">Restante</p>
+                                                    <p className="font-bold text-red-500 text-lg">R$ {debt.toFixed(2)}</p>
+                                                </div>
+                                                <button onClick={() => setPaymentModalState({isOpen: true, saleId: sale.id, maxAmount: debt})} 
+                                                    className="px-5 py-2 bg-primary text-white rounded-xl font-bold text-sm shadow-lg shadow-primary/20 hover:scale-105 transition-transform">
+                                                    Pagar
+                                                </button>
+                                            </div>
+                                        )}
+                                        
+                                        {/* Progress Bar */}
+                                        {!isPaid && paid > 0 && (
+                                            <div className="w-full bg-gray-200 dark:bg-gray-700 h-1.5 rounded-full mt-3 overflow-hidden">
+                                                <div className="bg-green-500 h-full" style={{width: `${(paid/sale.total)*100}%`}}></div>
+                                            </div>
+                                        )}
+                                    </div>
+                                )
+                            })
+                        )}
                     </div>
                 </div>
             )}
@@ -970,6 +1100,27 @@ const FullFiadosPage: React.FC<{
                 maxAmount={paymentModalState.maxAmount}
                 title="Registrar Pagamento"
             />
+
+            <Modal isOpen={manualDebtModal.isOpen} onClose={() => setManualDebtModal({isOpen: false, clientId: null})} title="Adicionar Débito Manual">
+                 <form onSubmit={handleManualDebtSubmit} className="space-y-4">
+                    <div className="bg-yellow-50 dark:bg-yellow-900/20 p-3 rounded-xl text-xs text-yellow-700 dark:text-yellow-400 mb-4">
+                        Isso criará um registro de dívida sem reduzir o estoque de produtos. Útil para taxas ou empréstimos.
+                    </div>
+                    <div>
+                        <label className="block text-sm font-bold mb-1">Descrição</label>
+                        <input autoFocus className="form-input w-full rounded-xl h-11 bg-background-light dark:bg-background-dark border-none" 
+                               value={manualDebtForm.description} onChange={e => setManualDebtForm({...manualDebtForm, description: e.target.value})} placeholder="Ex: Empréstimo, Taxa de entrega" required />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-bold mb-1">Valor (R$)</label>
+                        <input type="number" step="0.01" className="form-input w-full rounded-xl h-11 bg-background-light dark:bg-background-dark border-none" 
+                               value={manualDebtForm.amount} onChange={e => setManualDebtForm({...manualDebtForm, amount: e.target.value})} placeholder="0.00" required />
+                    </div>
+                    <button type="submit" className="w-full bg-primary text-white h-12 rounded-xl font-bold shadow-lg shadow-primary/20 mt-2">
+                        Confirmar Débito
+                    </button>
+                </form>
+            </Modal>
         </div>
     );
 };
@@ -1319,6 +1470,20 @@ const App: React.FC = () => {
         }));
         showToast('Pagamento registrado!');
     };
+    const addManualDebt = (clientId: string, amount: number, description: string) => {
+        // Simulate a sale for manual debt
+        const sale: Sale = {
+            id: `md${Date.now()}`,
+            clientId,
+            items: [{ productId: 'manual_debt', quantity: 1, unitPrice: amount }],
+            total: amount,
+            date: new Date().toISOString(),
+            paymentMethod: PaymentMethod.Credit,
+            payments: []
+        };
+        setSales((p: any) => [...p, sale]);
+        showToast('Débito lançado com sucesso!');
+    };
     
     const addExpense = (exp: Omit<Expense, 'id'>) => setExpenses((p: any) => [...p, { id: `e${Date.now()}`, ...exp }]);
     const deleteExpense = (id: string) => setExpenses((p: any) => p.filter((e: any) => e.id !== id));
@@ -1338,7 +1503,7 @@ const App: React.FC = () => {
             case Page.NovaVenda: return <FullNewSalePage clients={clients} products={products} addSale={addSale} onSaleComplete={() => setCurrentPage(Page.Historico)} showToast={showToast} />;
             case Page.Clientes: return <FullClientsPage clients={clients} addClient={addClient} deleteClient={deleteClient} showToast={showToast} />;
             case Page.Produtos: return <FullProductsPage products={products} addProduct={addProduct} deleteProduct={deleteProduct} showToast={showToast} />;
-            case Page.Fiados: return <FullFiadosPage clients={clients} sales={sales} onAddPayment={addPayment} />;
+            case Page.Fiados: return <FullFiadosPage clients={clients} sales={sales} onAddPayment={addPayment} onAddManualDebt={addManualDebt} products={products} />;
             case Page.Historico: return <FullHistoryPage sales={sales} clients={clients} />;
             case Page.Despesas: return <FullExpensesPage expenses={expenses} addExpense={addExpense} deleteExpense={deleteExpense} showToast={showToast} />;
             case Page.Configuracoes: return <FullSettingsPage user={user} updateUser={updateUser} resetData={resetData} showToast={showToast} isDarkMode={darkMode} toggleTheme={() => setDarkMode(!darkMode)} onLogout={handleLogout} />;
