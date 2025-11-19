@@ -80,6 +80,97 @@ const Modal: React.FC<{ isOpen: boolean; onClose: () => void; title: string; chi
     );
 };
 
+const ConfirmationModal: React.FC<{
+    isOpen: boolean;
+    onClose: () => void;
+    onConfirm: () => void;
+    title: string;
+    message: string;
+    confirmText?: string;
+    cancelText?: string;
+    isDestructive?: boolean;
+}> = ({ isOpen, onClose, onConfirm, title, message, confirmText = "Confirmar", cancelText = "Cancelar", isDestructive = false }) => {
+    if (!isOpen) return null;
+    return (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-sm transition-opacity" onClick={onClose}></div>
+            <div className="relative w-full max-w-sm bg-surface-light dark:bg-surface-dark rounded-2xl shadow-2xl p-6 animate-slide-up transform transition-all">
+                <div className="mb-4 flex justify-center">
+                    <div className={`h-16 w-16 rounded-full flex items-center justify-center ${isDestructive ? 'bg-red-100 text-red-500' : 'bg-primary/10 text-primary'}`}>
+                        <span className="material-symbols-outlined text-3xl">{isDestructive ? 'warning' : 'info'}</span>
+                    </div>
+                </div>
+                <h3 className="text-lg font-bold text-text-primary-light dark:text-text-primary-dark text-center mb-2">{title}</h3>
+                <p className="text-text-secondary-light dark:text-text-secondary-dark text-center mb-6">{message}</p>
+                <div className="flex gap-3">
+                    <button onClick={onClose} className="flex-1 h-11 rounded-xl font-bold bg-gray-100 dark:bg-white/5 text-text-primary-light dark:text-text-primary-dark hover:bg-gray-200 transition-colors">
+                        {cancelText}
+                    </button>
+                    <button onClick={() => { onConfirm(); onClose(); }} className={`flex-1 h-11 rounded-xl font-bold text-white shadow-lg transition-colors ${isDestructive ? 'bg-status-red shadow-status-red/20 hover:bg-red-600' : 'bg-primary shadow-primary/20 hover:bg-primary-light'}`}>
+                        {confirmText}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const PaymentInputModal: React.FC<{
+    isOpen: boolean;
+    onClose: () => void;
+    onConfirm: (amount: number) => void;
+    maxAmount: number;
+    title: string;
+}> = ({ isOpen, onClose, onConfirm, maxAmount, title }) => {
+    const [amount, setAmount] = useState('');
+
+    useEffect(() => {
+        if (isOpen) setAmount('');
+    }, [isOpen]);
+
+    if (!isOpen) return null;
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        const val = parseFloat(amount);
+        if (val > 0 && val <= maxAmount) {
+            onConfirm(val);
+            onClose();
+        }
+    };
+
+    return (
+        <Modal isOpen={isOpen} onClose={onClose} title={title}>
+            <form onSubmit={handleSubmit}>
+                <div className="mb-4">
+                    <label className="block text-sm font-bold mb-1 text-text-secondary-light">Valor do Pagamento</label>
+                    <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-gray-400">R$</span>
+                        <input 
+                            type="number" 
+                            step="0.01" 
+                            autoFocus
+                            className="form-input w-full pl-10 h-12 rounded-xl bg-background-light dark:bg-background-dark border-none font-bold text-lg"
+                            value={amount}
+                            onChange={e => setAmount(e.target.value)}
+                            placeholder={`Máx: ${maxAmount.toFixed(2)}`}
+                            max={maxAmount}
+                        />
+                    </div>
+                    <p className="text-xs text-text-secondary-light mt-1">Valor restante: R$ {maxAmount.toFixed(2)}</p>
+                </div>
+                <button 
+                    type="submit" 
+                    disabled={!amount || parseFloat(amount) <= 0 || parseFloat(amount) > maxAmount}
+                    className="w-full bg-primary disabled:opacity-50 disabled:cursor-not-allowed text-white h-12 rounded-xl font-bold shadow-lg shadow-primary/20"
+                >
+                    Confirmar Pagamento
+                </button>
+            </form>
+        </Modal>
+    );
+};
+
 // --- NAVIGATION COMPONENTS ---
 
 const BottomNav: React.FC<{ activePage: Page; setActivePage: (page: Page) => void; openMenu: () => void }> = ({ activePage, setActivePage, openMenu }) => {
@@ -471,6 +562,7 @@ const FullClientsPage: React.FC<{
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [newClient, setNewClient] = useState({ name: '', phone: '', email: '' });
     const [searchTerm, setSearchTerm] = useState('');
+    const [deleteConfirmation, setDeleteConfirmation] = useState<{isOpen: boolean, clientId: string | null}>({isOpen: false, clientId: null});
 
     const filtered = clients.filter(c => c.name.toLowerCase().includes(searchTerm.toLowerCase()));
 
@@ -481,6 +573,14 @@ const FullClientsPage: React.FC<{
             setNewClient({ name: '', phone: '', email: '' });
             setIsModalOpen(false);
             showToast('Cliente salvo!', 'success');
+        }
+    };
+
+    const handleDelete = () => {
+        if (deleteConfirmation.clientId) {
+            deleteClient(deleteConfirmation.clientId);
+            setDeleteConfirmation({isOpen: false, clientId: null});
+            showToast('Cliente removido', 'success');
         }
     };
 
@@ -508,7 +608,7 @@ const FullClientsPage: React.FC<{
                                  <h3 className="font-bold text-text-primary-light dark:text-text-primary-dark truncate">{client.name}</h3>
                                  <p className="text-sm text-text-secondary-light dark:text-text-secondary-dark">{client.phone}</p>
                              </div>
-                             <button onClick={() => { if(confirm('Excluir?')) deleteClient(client.id) }} className="p-2 text-gray-400 hover:text-red-500">
+                             <button onClick={() => setDeleteConfirmation({isOpen: true, clientId: client.id})} className="p-2 text-gray-400 hover:text-red-500">
                                  <span className="material-symbols-outlined">delete</span>
                              </button>
                          </div>
@@ -524,6 +624,16 @@ const FullClientsPage: React.FC<{
                     <button type="submit" className="w-full bg-primary text-white h-12 rounded-xl font-bold mt-2">Salvar Cliente</button>
                 </form>
             </Modal>
+
+            <ConfirmationModal 
+                isOpen={deleteConfirmation.isOpen}
+                onClose={() => setDeleteConfirmation({isOpen: false, clientId: null})}
+                onConfirm={handleDelete}
+                title="Excluir Cliente"
+                message="Tem certeza que deseja excluir este cliente? Todas as vendas associadas serão mantidas, mas o vínculo será perdido."
+                confirmText="Excluir"
+                isDestructive
+            />
         </div>
     )
 };
@@ -537,6 +647,7 @@ const FullProductsPage: React.FC<{
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [newProd, setNewProd] = useState({ name: '', price: '' });
     const [searchTerm, setSearchTerm] = useState('');
+    const [deleteConfirmation, setDeleteConfirmation] = useState<{isOpen: boolean, productId: string | null}>({isOpen: false, productId: null});
 
     const filtered = products.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()));
 
@@ -549,6 +660,14 @@ const FullProductsPage: React.FC<{
             showToast('Produto criado!', 'success');
         }
     };
+
+    const handleDelete = () => {
+        if(deleteConfirmation.productId){
+            deleteProduct(deleteConfirmation.productId);
+            setDeleteConfirmation({isOpen: false, productId: null});
+            showToast('Produto removido', 'success');
+        }
+    }
 
     return (
         <div className="pb-20 md:pb-0">
@@ -574,7 +693,7 @@ const FullProductsPage: React.FC<{
                                      <p className="text-primary font-bold">R$ {product.price.toFixed(2)}</p>
                                  </div>
                              </div>
-                             <button onClick={() => { if(confirm('Excluir?')) deleteProduct(product.id) }} className="p-2 text-gray-400 hover:text-red-500">
+                             <button onClick={() => setDeleteConfirmation({isOpen: true, productId: product.id})} className="p-2 text-gray-400 hover:text-red-500">
                                  <span className="material-symbols-outlined">delete</span>
                              </button>
                          </div>
@@ -589,6 +708,16 @@ const FullProductsPage: React.FC<{
                     <button type="submit" className="w-full bg-primary text-white h-12 rounded-xl font-bold mt-2">Salvar Produto</button>
                 </form>
             </Modal>
+
+            <ConfirmationModal
+                isOpen={deleteConfirmation.isOpen}
+                onClose={() => setDeleteConfirmation({isOpen: false, productId: null})}
+                onConfirm={handleDelete}
+                title="Excluir Produto"
+                message="Tem certeza que deseja excluir este produto? Ele não aparecerá mais para novas vendas."
+                confirmText="Excluir"
+                isDestructive
+            />
         </div>
     )
 };
@@ -630,6 +759,7 @@ const FullFiadosPage: React.FC<{
     onAddPayment: (saleId: string, amount: number) => void
 }> = ({ clients, sales, onAddPayment }) => {
     const [activeClientId, setActiveClientId] = useState<string | null>(null);
+    const [paymentModalState, setPaymentModalState] = useState<{isOpen: boolean, saleId: string | null, maxAmount: number}>({isOpen: false, saleId: null, maxAmount: 0});
 
     // Logic to group debts by client
     const debtClients = useMemo(() => {
@@ -651,6 +781,12 @@ const FullFiadosPage: React.FC<{
     }, [sales, clients]);
 
     const clientSales = activeClientId ? sales.filter(s => s.clientId === activeClientId && s.paymentMethod === PaymentMethod.Credit && (s.total - s.payments.reduce((a,b)=>a+b.amount,0)) > 0.01) : [];
+
+    const handlePaymentConfirm = (amount: number) => {
+        if (paymentModalState.saleId) {
+            onAddPayment(paymentModalState.saleId, amount);
+        }
+    };
 
     return (
         <div className="pb-20 md:pb-0 h-full flex flex-col">
@@ -709,10 +845,8 @@ const FullFiadosPage: React.FC<{
                                             <p className="text-sm text-green-600">Pago: R$ {paid.toFixed(2)}</p>
                                             <p className="font-bold text-red-500 text-lg mt-1">Falta: R$ {debt.toFixed(2)}</p>
                                         </div>
-                                        <button onClick={() => {
-                                            const amount = prompt(`Valor para pagar (Máx: ${debt.toFixed(2)}):`);
-                                            if(amount) onAddPayment(sale.id, parseFloat(amount));
-                                        }} className="px-4 py-2 bg-primary text-white rounded-lg font-bold text-sm shadow-lg shadow-primary/20">
+                                        <button onClick={() => setPaymentModalState({isOpen: true, saleId: sale.id, maxAmount: debt})} 
+                                            className="px-4 py-2 bg-primary text-white rounded-lg font-bold text-sm shadow-lg shadow-primary/20">
                                             Pagar
                                         </button>
                                     </div>
@@ -722,6 +856,14 @@ const FullFiadosPage: React.FC<{
                     </div>
                 </div>
             )}
+
+            <PaymentInputModal 
+                isOpen={paymentModalState.isOpen}
+                onClose={() => setPaymentModalState(prev => ({...prev, isOpen: false}))}
+                onConfirm={handlePaymentConfirm}
+                maxAmount={paymentModalState.maxAmount}
+                title="Registrar Pagamento"
+            />
         </div>
     );
 };
@@ -734,6 +876,7 @@ const FullExpensesPage: React.FC<{
 }> = ({ expenses, addExpense, deleteExpense, showToast }) => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [newExpense, setNewExpense] = useState({ description: '', category: 'Outros', amount: '', date: new Date().toISOString().split('T')[0] });
+    const [deleteConfirmation, setDeleteConfirmation] = useState<{isOpen: boolean, expenseId: string | null}>({isOpen: false, expenseId: null});
     
     const categories = ['Compra de Estoque', 'Embalagens', 'Marketing', 'Transporte', 'Alimentação', 'Outros'];
     
@@ -753,6 +896,14 @@ const FullExpensesPage: React.FC<{
         setNewExpense({ description: '', category: 'Outros', amount: '', date: new Date().toISOString().split('T')[0] });
         setIsModalOpen(false);
         showToast('Despesa registrada', 'success');
+    };
+
+    const handleDelete = () => {
+        if (deleteConfirmation.expenseId) {
+            deleteExpense(deleteConfirmation.expenseId);
+            setDeleteConfirmation({isOpen: false, expenseId: null});
+            showToast('Despesa removida', 'success');
+        }
     };
 
     return (
@@ -803,7 +954,7 @@ const FullExpensesPage: React.FC<{
                                 </div>
                                 <div className="flex items-center gap-3">
                                     <span className="font-bold text-red-500">- R$ {exp.amount.toFixed(2)}</span>
-                                    <button onClick={() => confirm('Apagar despesa?') && deleteExpense(exp.id)} className="w-8 h-8 flex items-center justify-center text-gray-400 hover:bg-red-50 hover:text-red-500 rounded-full transition-colors">
+                                    <button onClick={() => setDeleteConfirmation({isOpen: true, expenseId: exp.id})} className="w-8 h-8 flex items-center justify-center text-gray-400 hover:bg-red-50 hover:text-red-500 rounded-full transition-colors">
                                         <span className="material-symbols-outlined text-lg">delete</span>
                                     </button>
                                 </div>
@@ -844,6 +995,16 @@ const FullExpensesPage: React.FC<{
                     </button>
                 </form>
             </Modal>
+
+            <ConfirmationModal 
+                isOpen={deleteConfirmation.isOpen}
+                onClose={() => setDeleteConfirmation({isOpen: false, expenseId: null})}
+                onConfirm={handleDelete}
+                title="Excluir Despesa"
+                message="Deseja realmente apagar este registro de despesa?"
+                confirmText="Apagar"
+                isDestructive
+            />
         </div>
     );
 };
@@ -858,6 +1019,7 @@ const FullSettingsPage: React.FC<{
 }> = ({ user, updateUser, resetData, showToast, isDarkMode, toggleTheme }) => {
     const [formData, setFormData] = useState(user);
     const [isEditing, setIsEditing] = useState(false);
+    const [resetConfirmation, setResetConfirmation] = useState(false);
 
     const handleSave = () => {
         updateUser(formData);
@@ -866,10 +1028,8 @@ const FullSettingsPage: React.FC<{
     };
 
     const handleReset = () => {
-        if (confirm('Tem certeza? Isso apagará TODAS as vendas, clientes e produtos e restaurará os dados iniciais.')) {
-            resetData();
-            showToast('App restaurado.', 'success');
-        }
+        resetData();
+        showToast('App restaurado.', 'success');
     };
 
     return (
@@ -936,7 +1096,7 @@ const FullSettingsPage: React.FC<{
                             <div className={`w-5 h-5 bg-white rounded-full absolute top-1 transition-all shadow-sm ${isDarkMode ? 'left-6' : 'left-1'}`}></div>
                         </button>
                     </div>
-                    <button onClick={handleReset} className="w-full p-4 flex items-center justify-between text-left hover:bg-red-50 dark:hover:bg-red-900/10 transition-colors group">
+                    <button onClick={() => setResetConfirmation(true)} className="w-full p-4 flex items-center justify-between text-left hover:bg-red-50 dark:hover:bg-red-900/10 transition-colors group">
                         <div className="flex items-center gap-3">
                             <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-900/30 text-red-600 flex items-center justify-center group-hover:bg-red-200 transition-colors">
                                 <span className="material-symbols-outlined">delete_forever</span>
@@ -952,6 +1112,16 @@ const FullSettingsPage: React.FC<{
                 
                 <p className="text-center text-xs text-gray-400 mb-10">PerfumeFlow v1.2.0 • Build 2024</p>
             </div>
+
+            <ConfirmationModal 
+                isOpen={resetConfirmation}
+                onClose={() => setResetConfirmation(false)}
+                onConfirm={handleReset}
+                title="Resetar Aplicativo"
+                message="Tem certeza absoluta? Isso apagará TODAS as vendas, clientes, produtos e despesas e restaurará os dados iniciais. Essa ação é irreversível."
+                confirmText="Sim, apagar tudo"
+                isDestructive
+            />
         </div>
     )
 }
